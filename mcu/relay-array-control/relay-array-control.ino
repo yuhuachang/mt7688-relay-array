@@ -1,5 +1,10 @@
 
-// led to indicate an action
+// inverse indicator
+// when this bit is 0, the relay is ON when receives positive signal (3.3v) and is OFF when there is no signal (0v).
+// when this bit is 1, relay is ON when there is no signal (0v) and is OFF when receives signal (3.3v).
+#define INV true
+
+// led to indicate an action and also for test indicator
 #define LED 13
 
 // total number of digital pins
@@ -11,6 +16,7 @@ int pin[PIN_COUNT];
 // pin state
 int pinState[PIN_COUNT];
 
+// when test mode is on, LED pin flashes to identify the active board
 bool testMode = false;
 
 void setup() {
@@ -51,6 +57,16 @@ void setup() {
     pinMode(pin[i], OUTPUT);
   }
 
+  // init state
+  for (int i = 0; i < PIN_COUNT; i++) {
+    if (INV) {
+      digitalWrite(pin[i], HIGH);
+    } else {
+      digitalWrite(pin[i], LOW);
+    }
+  }
+
+  // init serial
   Serial.begin(9600); // debug serial
   Serial1.begin(57600); // to MPU
 }
@@ -59,6 +75,10 @@ void loop() {
 
   // Read signal from MPU.  LED is on while reading.
   if (Serial1.available()) {
+    // Wait a bit for the entire message to arrive
+    delay(100);
+
+    // Start
     digitalWrite(LED, HIGH);
 
     // MPU should send request in exactly 3 bytes binary.
@@ -75,9 +95,14 @@ void loop() {
     Serial.println("");
 
     if (buffer[2] >> 1 & 0x01 == 0x01) {
+
+      // if is in test mode, ignore other data.
       Serial.println("test mode on");
       testMode = true;
+
     } else if (buffer[2] & 0x01 == 0x01) {
+      
+      // read data in write mode
       Serial.println("write mode");
       for (int i = 0; i < 8; i++) {
         pinState[i] = buffer[0] >> (7 - i) & 0x01 == 1 ? HIGH : LOW;
@@ -88,18 +113,27 @@ void loop() {
       for (int i = 0; i < 4; i++) {
         pinState[i + 16] = buffer[2] >> (7 - i) & 0x01 == 1 ? HIGH : LOW;
       }
+
       // reset pin state
       for (int i = 0; i < PIN_COUNT; i++) {
         if (pinState[i] == HIGH) {
-          digitalWrite(pin[i], HIGH);
+          if (INV) {
+            digitalWrite(pin[i], LOW);
+          } else {
+            digitalWrite(pin[i], HIGH);
+          }
           Serial.print(i);
           Serial.println(" on");
         } else {
-          digitalWrite(pin[i], LOW);
+          if (INV) {
+            digitalWrite(pin[i], HIGH);
+          } else {
+            digitalWrite(pin[i], LOW);
+          }
           Serial.println(i);
         }
       }
-      Serial.println();
+
     } else {
       // read mode
       testMode = false;
